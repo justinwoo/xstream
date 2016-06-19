@@ -120,6 +120,43 @@ describe('Stream.prototype.flatten', () => {
       });
     });
 
+    it('shuold flatten stream of stream of values from two streams with one stream dependent on the other', (done) => {
+      const s0 = xs.create<string>({
+        start: (o) => {
+          o.next('a');
+          setTimeout(() => o.next('b'), 20);
+          setTimeout(() => o.complete(), 100);
+        },
+        stop: () => null
+      });
+      const s1 = xs.create<string>({
+        start: (o) => {
+          o.next('A');
+          setTimeout(() => o.next('B'), 10);
+          setTimeout(() => o.next('C'), 30);
+          setTimeout(() => o.next('D'), 40);
+          setTimeout(() => o.complete(), 100);
+        },
+        stop: () => null
+      });
+      const s2 = xs.combine(s0, s1).map(([a, b]) => a + b);
+
+      const stream = s2.map(a => s1.map(b => a + b)).flatten();
+
+      const expected = ['aAA', 'aBB', 'bCC', 'bDD'];
+
+      stream.addListener({
+        next: (x) => {
+          assert.equal(x, expected.shift());
+        },
+        error: (err: any) => done(err),
+        complete: () => {
+          assert.equal(expected.length, 0);
+          done();
+        }
+      });
+    });
+
     it('should propagate user mistakes in project as errors', (done) => {
       const source = xs.periodic(30).take(1);
       const stream = source.map(
